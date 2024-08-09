@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Video Playback</title>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-storage.js"></script> <!-- Include Firebase Storage -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script> <!-- Include CryptoJS -->
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            background-image: url('https://wallpaperaccess.com/full/17022.jpg'); /* Background suitable for movies */
+            background-size: cover;
+            color: #fff;
+            font-family: Arial, sans-serif;
+        }
+
+        h1, h2 {
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.8);
+        }
+
+        .container {
+            text-align: center;
+            background: rgba(0, 0, 0, 0.7);
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.5);
+        }
+
+        video {
+            display: block;
+            margin: 0 auto;
+            border: 5px solid #fff;
+            border-radius: 10px;
+            box-shadow: 0 0 15px rgba(0, 0, 0, 0.8);
+        }
+
+        .button-container {
+            display: flex;
+            justify-content: center;
+            margin-top: 20px;
+            flex-wrap: wrap;
+        }
+
+        button {
+            background-color: #ff5733;
+            border: none;
+            color: white;
+            padding: 15px 30px;
+            text-align: center;
+            text-decoration: none;
+            display: inline-block;
+            font-size: 16px;
+            margin: 10px;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: background-color 0.3s ease;
+        }
+
+        button:hover {
+            background-color: #c70039;
+        }
+
+        .password-container {
+            margin-top: 20px;
+        }
+
+        input[type="password"] {
+            padding: 10px;
+            margin-right: 10px;
+            border-radius: 5px;
+            border: none;
+            font-size: 16px;
+        }
+
+        #closeSessionForm, #changeVideoForm {
+            display: none;
+            margin-top: 20px;
+        }
+
+        #closeSessionButton, #changeVideoForm button {
+            background-color: #33c1ff;
+            border: none;
+            color: white;
+            padding: 15px 30px;
+            text-align: center;
+            text-decoration: none;
+            display: inline-block;
+            font-size: 16px;
+            margin-top: 10px;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: background-color 0.3s ease;
+        }
+
+        #closeSessionButton:hover, #changeVideoForm button:hover {
+            background-color: #0073e6;
+        }
+    </style>
+    <script>
+        var firebaseConfig = {
+            apiKey: "AIzaSyCymw7q4i2lN6R56OkXt9AjykQI7tol2W4",
+            authDomain: "videoclub-1cf14.firebaseapp.com",
+            databaseURL: "https://videoclub-1cf14-default-rtdb.firebaseio.com",
+            projectId: "videoclub-1cf14",
+            storageBucket: "videoclub-1cf14.appspot.com",
+            messagingSenderId: "77513105336",
+            appId: "1:77513105336:web:55ec1bc103f051e743b94d",
+            measurementId: "G-SD89DMD4K3"
+        };
+        firebase.initializeApp(firebaseConfig);
+        var dbRef = firebase.database().ref("/{{ rom }}");
+
+        function playVideo() {
+            var video = document.getElementById('videoPlayer');
+            video.play();
+            dbRef.update({ 'pl': 1 });
+        }
+
+        function pauseVideo() {
+            var video = document.getElementById('videoPlayer');
+            video.pause();
+            dbRef.update({ 'pl': 0 });
+        }
+
+        document.addEventListener("DOMContentLoaded", function() {
+            var video = document.getElementById('videoPlayer');
+
+            video.addEventListener('play', function() {
+                dbRef.update({ 'pl': 1 });
+            });
+
+            video.addEventListener('pause', function() {
+                dbRef.update({ 'pl': 0 });
+            });
+
+            dbRef.child('pl').on('value', function(snapshot) {
+                if (snapshot.val() === 1 && video.paused) {
+                    video.play();
+                } else if (snapshot.val() === 0 && !video.paused) {
+                    video.pause();
+                }
+            });
+        });
+
+
+        function verifyPassword() {
+            var inputPassword = document.getElementById('inputPassword').value;
+            var hashedInputPassword = CryptoJS.SHA256(inputPassword).toString();
+
+            dbRef.child('password').once('value').then(function(snapshot) {
+                var storedPassword = snapshot.val().toString();
+
+                if (hashedInputPassword === storedPassword) {
+                    document.getElementById('closeSessionForm').style.display = 'block';
+                    document.getElementById('changeVideoForm').style.display = 'block';
+                    document.getElementById('setSyncTimeButton').style.display = 'block'; // Show Set Sync Time button
+                } else {
+                    alert('Incorrect password');
+                }
+            });
+        }
+
+        function changeVideo() {
+            var fileInput = document.getElementById('videoFile');
+            var file = fileInput.files[0];
+            if (!file) {
+                alert('Please select a video file.');
+                return;
+            }
+
+            dbRef.child('storagelink').once('value').then(function(snapshot) {
+                var oldVideoURL = snapshot.val();
+                if (oldVideoURL) {
+                    // Extract the file path from the URL
+                    var oldVideoRef = firebase.storage().refFromURL(oldVideoURL);
+                    oldVideoRef.delete().then(function() {
+                        console.log('Old video deleted successfully');
+                    }).catch(function(error) {
+                        console.error('Error deleting old video: ', error);
+                    });
+                }
+
+                var storagePath = 'videos/' + '{{ rom }}.mp4';
+                var videoStorageRef = storageRef.child(storagePath);
+
+                var uploadTask = videoStorageRef.put(file);
+
+                uploadTask.on('state_changed',
+                    function(snapshot) {
+                        // Observe state change events such as progress, pause, and resume
+                    },
+                    function(error) {
+                        alert('Upload failed: ' + error.message);
+                    },
+                    function() {
+                        uploadTask.snapshot.ref.getDownloadURL().then(function(downloadURL) {
+                            dbRef.update({ 'storagelink': downloadURL });
+                            alert('Video uploaded successfully!');
+                            var video = document.getElementById('videoPlayer');
+                            video.src = downloadURL;
+                            video.load();
+                            video.play();
+                        });
+                    }
+                );
+            });
+        }
+
+        function setSyncTime() {
+            var video = document.getElementById('videoPlayer');
+            var currentTime = video.currentTime; // Get the current time in seconds
+            dbRef.update({ 'timeplayed': currentTime }); // Store the current time in Firebase
+        }
+
+        function syncTime() {
+            dbRef.child('timeplayed').once('value').then(function (snapshot) {
+                var video = document.getElementById('videoPlayer');
+                var syncTime = snapshot.val();
+                console.log(syncTime)
+                if (syncTime !== null) {
+                    video.currentTime = syncTime; // Set the video to the retrieved time
+                }
+            });
+        }
+
+    </script>
+</head>
+<body>
+    <div class="container">
+        <h1>Video Playback</h1>
+        <h2>Room Number: {{ rom }}</h2>
+        <video id="videoPlayer" width="640" height="360" controls>
+            <source src="{{ videourl or storagelink }}" type="video/mp4">
+            Your browser does not support the video tag.
+        </video>
+
+        <div class="button-container">
+            <button onclick="playVideo()">Play</button>
+            <button onclick="pauseVideo()">Pause</button>
+        </div>
+
+        <div class="password-container">
+            <label for="inputPassword">Enter Password:</label>
+            <input type="password" id="inputPassword" name="inputPassword">
+            <button onclick="verifyPassword()">Verify</button>
+        </div>
+
+        <form id="closeSessionForm" action="{{ url_for('close_session') }}" method="post">
+            <input type="hidden" name="room_number" value="{{ rom }}">
+            <button type="submit" id="closeSessionButton">Close Session</button>
+        </form>
+
+        <form id="changeVideoForm">
+            <input type="file" id="videoFile" accept="video/*">
+            <button type="button" onclick="changeVideo()">Change Video</button>
+        </form>
+
+        <div class="button-container">
+            <button id="setSyncTimeButton" onclick="setSyncTime()" style="display:none;">Set Sync Time</button>
+            <button onclick="syncTime()">Sync Time</button>
+        </div>
+    </div>
+</body>
+</html>
